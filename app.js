@@ -61,29 +61,44 @@ app.get('/hangouts/:encounterId', (request, response) => {
 
 app.post('/hangouts', (request, response) => {
 	const encounterId = request.body.encounterId;
-	const key = datastore.key(['Encounter', encounterId]);
-	datastore.get(key).then(entity => {
-		if (entity) {
-			debugLog('Provider found existing encounter ' + request.body.encounterId + ' with URL ' + entity.Url);
-			response.send({url: entity.Url});
-			return;
-		}
-
+	if (encounterId && encounterId != '') {
+		const key = datastore.key(['Encounter', encounterId]);
+		datastore.get(key).then(entity => {
+			if (entity) {
+				debugLog('Provider found existing encounter ' + request.body.encounterId + ' with URL ' + entity.Url);
+				response.send({url: entity.Url});
+				return;
+			}
+	
+			user.withCredentials(request, response, client => {
+				calendar.createEvent(client, encounterId, (err, url) => {
+					if (err) {
+						debugLog('ERROR: Provider calendar event create for encounter ' + request.body.encounterId + ' failed with error ' + err);
+						response.status(500).send(err);
+						return;
+					}
+					debugLog('Provider created calendar event for encounter ' + request.body.encounterId + ' with URL ' + url);
+					const entity = { Url: url };
+					datastore.set(key, entity).then(() => {
+						response.send({url: url});
+					});
+				});
+			});
+		}).catch(error(response));
+	} else {
 		user.withCredentials(request, response, client => {
-			calendar.createEvent(client, encounterId, (err, url) => {
+			calendar.createEvent(client, '', (err, url) => {
 				if (err) {
-					debugLog('ERROR: Provider calendar event create for encounter ' + request.body.encounterId + ' failed with error ' + err);
+					debugLog('ERROR: Provider calendar event without encounter failed with error ' + err);
 					response.status(500).send(err);
 					return;
 				}
-				debugLog('Provider created calendar event for encounter ' + request.body.encounterId + ' with URL ' + url);
-				const entity = { Url: url };
-				datastore.set(key, entity).then(() => {
-					response.send({url: url});
-				});
+				debugLog('Provider created calendar event without encounter with URL ' + url);
+				response.send({url: url});
 			});
 		});
-	}).catch(error(response));
+	}
+	
 });
 
 app.get('/authenticate', (request, response) => {
