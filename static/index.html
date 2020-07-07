@@ -26,13 +26,13 @@
     <script src="language-assets.js"></script>
     <link rel="stylesheet" href="assets/styles.css" />
     <script>
-      const meetBaseUrl =  'https://meet.google.com'
+      const meetBaseUrl = "https://meet.google.com";
       $(function () {
         setLanguage("en");
         FHIR.oauth2
           .ready()
           .then((client) => {
-            console.log('FHIR oauth ready');
+            console.log("FHIR oauth ready");
             $("#language-selector").on("change", () => {
               setLanguage($("#language-selector").val());
             });
@@ -56,29 +56,34 @@
                 // Patient needs to see the consent screen, provider bypasses it.
                 if (userResourceType === "patient") {
                   $("#consent-ack").on("click", () => {
-                    console.log('consent ack clicked');
+                    console.log("consent ack clicked");
                     showWaitingRoom();
                     waitForMeetingOnEncounter(client, client.encounter.id);
                     return;
                   });
                 } else {
                   showWaitingRoom();
-                  client.encounter.read().then((e) => {
-                    var meetUrl = findMeetingUrl(e);
-                    if(!meetUrl || meetUrl == '') {
-                      return createMeetOnEncounter(e)
-                    }
-                    window.location.replace(meetUrl);
-                  }).then((e) => {
-                    return client.update(e)
-                  }).then((e) => {
-                    var meetUrl = findMeetingUrl(e);
-                    if (meetUrl) {
+                  client.encounter
+                    .read()
+                    .then((e) => {
+                      var meetUrl = findMeetingUrl(e);
+                      if (!meetUrl) {
+                        return createMeetOnEncounter(e);
+                      }
                       window.location.replace(meetUrl);
-                    }
-                  }).catch((error) => {
-                    showError("#error-fihr-serve");
-                  });
+                    })
+                    .then((e) => {
+                      return client.update(e);
+                    })
+                    .then((e) => {
+                      var meetUrl = findMeetingUrl(e);
+                      if (meetUrl) {
+                        window.location.replace(meetUrl);
+                      }
+                    })
+                    .catch((error) => {
+                      showError("#error-fihr-serve");
+                    });
                 }
               } else {
                 showError("#error-fihr-serve");
@@ -93,10 +98,10 @@
 
       function findMeetingUrl(encounter) {
         var url = null;
-        if(encounter && encounter.meta && encounter.meta.tag) {
-          encounter.meta.tag.forEach(t => {
-            if(t.system == meetBaseUrl) {
-              url = `${meetBaseUrl}/${t.code}`
+        if (encounter && encounter.meta && encounter.meta.tag) {
+          encounter.meta.tag.forEach((t) => {
+            if (t.system == meetBaseUrl) {
+              url = `${meetBaseUrl}/${t.code}`;
             }
           });
         }
@@ -105,17 +110,20 @@
 
       function waitForMeetingOnEncounter(client, encounterId) {
         var timerId = window.setInterval(function () {
-          client.request(`Encounter/${encounterId}`).then(e => {
-            var meetUrl = findMeetingUrl(e);
-            if(meetUrl) {
-              window.clearInterval(timerId);
-              window.location.replace(meetUrl);
-              return;
-            }
-          }).catch(e => {
-            console.log(e);
-            showError("#error-unexpected");
-          });
+          client
+            .request(`Encounter/${encounterId}`)
+            .then((e) => {
+              var meetUrl = findMeetingUrl(e);
+              if (meetUrl) {
+                window.clearInterval(timerId);
+                window.location.replace(meetUrl);
+                return;
+              }
+            })
+            .catch((e) => {
+              console.log(e);
+              showError("#error-unexpected");
+            });
         }, 5000);
       }
 
@@ -142,23 +150,26 @@
       function createMeetOnEncounter(encounter) {
         return new Promise((resolve, reject) => {
           $.post("/hangouts", (data, status) => {
-          var url = data['url'];
-          if(url && url.startsWith(meetBaseUrl)) {
-            var meetCode = url.replace(meetBaseUrl, '').replace(/\//g, '');
-            if (!encounter.meta.tag) {
-              encounter.meta.tag = [];
+            var url = data["url"];
+            if (url && url.startsWith(meetBaseUrl)) {
+              var meetCode = url.replace(meetBaseUrl, "").replace(/\//g, "");
+              if (!encounter.meta.tag) {
+                encounter.meta.tag = [];
+              }
+              encounter.meta.tag.push({ system: meetBaseUrl, code: meetCode });
+              resolve(encounter);
+            } else if (
+              url &&
+              url.startsWith("https://accounts.google.com/o/oauth2")
+            ) {
+              window.location.replace(url);
+              resolve(null);
             }
-            encounter.meta.tag.push({system: meetBaseUrl, code: meetCode});
-            resolve(encounter);
-          } else if (url && url.startsWith('https://accounts.google.com/o/oauth2')) {
-            window.location.replace(url);
-            resolve(null);
-          }
-        }).fail(function () {
-          showError("#error-unexpected");
-          reject(new Error('failed to create hangout meet'));
+          }).fail(function () {
+            showError("#error-unexpected");
+            reject(new Error("failed to create hangout meet"));
+          });
         });
-        }) 
       }
 
       function create(encounterId) {
